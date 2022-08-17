@@ -721,13 +721,15 @@ export function useSearchBooks(
     filter: IFilter, // this is *which* books to return
     orderingScheme?: BookOrderingScheme,
     languageForSorting?: string,
-    doNotActuallyRunQuery?: boolean
+    doNotActuallyRunQuery?: boolean,
+    extraFields?: string
 ): ISearchBooksResult {
     const fullParams = {
         count: 1,
         keys:
             // this should be all the fields of IBasicBookInfo
-            "title,baseUrl,objectId,langPointers,tags,features,lastUploaded,harvestState,harvestStartedAt,pageCount,phashOfFirstContentImage,allTitles,edition,draft,rebrand",
+            "title,baseUrl,objectId,langPointers,tags,features,lastUploaded,harvestState,harvestStartedAt,pageCount,phashOfFirstContentImage,allTitles,edition,draft,rebrand" +
+            (extraFields ?? ""),
         ...params,
     };
     const bookResultsStatus: IAxiosAnswer = useBookQueryInternal(

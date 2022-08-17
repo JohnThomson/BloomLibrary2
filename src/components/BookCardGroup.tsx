@@ -27,6 +27,9 @@ import { AllCard } from "./AllCard";
 import { CollectionLayout } from "./CollectionLayout";
 import { ListOfBookGroups } from "./ListOfBookGroups";
 import { CollectionInfoWidget } from "./CollectionInfoWidget";
+import { useIsAppHosted } from "./appHosted/AppHostedUtils";
+import { ArtifactType } from "../model/Book";
+import { ArtifactVisibilitySettingsGroup } from "../model/ArtifactVisibilitySettings";
 
 interface IProps {
     title?: string;
@@ -87,8 +90,9 @@ export const BookCardGroup: React.FunctionComponent<IProps> = (props) => {
     );
 };
 const BookCardGroupInner: React.FunctionComponent<IProps> = (props) => {
+    const appHosted = useIsAppHosted();
     // we have either a horizontally-scrolling list of 20, or several rows
-    // of 5 each
+    // of 5 each.
     const maxCardsToRetrieve = props.rows ? props.rows * 5 : 20;
     const collectionFilter = props.collection.filter ?? {};
     const getResponsiveChoice = useResponsiveChoice();
@@ -97,13 +101,17 @@ const BookCardGroupInner: React.FunctionComponent<IProps> = (props) => {
     const search = useSearchBooks(
         {
             include: "langPointers",
-            // the following is arbitrary. I don't even yet no what the ux is that we want.
-            limit: maxCardsToRetrieve, // note that if the selected BookOrderingScheme requires client-side sorting, this will be ignored
+            // (JT: old comment I don't understand) the following is arbitrary. I don't even yet no what the ux is that we want.
+            // note that if the selected BookOrderingScheme requires client-side sorting, this will be ignored
+            // if appHosted, we will do further client-side filtering, so can't have a limit.
+            limit: appHosted ? undefined : maxCardsToRetrieve,
             skip: props.skip,
         },
         collectionFilter,
         props.collection.orderingScheme,
-        props.contextLangIso
+        props.contextLangIso,
+        undefined,
+        appHosted ? ",show" : undefined // we need this field to determine artifact availability
     );
 
     // We make life hard on <Lazy> components by thinking maybe we'll show, for example, a row of Level 1 books at
@@ -132,6 +140,30 @@ const BookCardGroupInner: React.FunctionComponent<IProps> = (props) => {
 
     if (props.collection.secondaryFilter) {
         books = books.filter((b) => props.collection.secondaryFilter!(b));
+    }
+    if (appHosted) {
+        // Get at most maxBooksToShow books that we have BloomPUBs for
+        const booksToShow = [];
+        let j = 0;
+        for (let i = 0; i < books.length; i++) {
+            const b = books[i];
+            const settings = ArtifactVisibilitySettingsGroup.createFromParseServerData(
+                (b as any).show
+            );
+            const bloomReaderSettings = settings[ArtifactType.bloomReader];
+            if (
+                b.harvestState === "Done" &&
+                bloomReaderSettings && // harvester made a bloomd
+                bloomReaderSettings.decision // no one decided it was not fit to use
+            ) {
+                booksToShow[j] = books[i];
+                j++;
+                if (j >= maxCardsToRetrieve) {
+                    break;
+                }
+            }
+        }
+        books = booksToShow;
     }
 
     // As of 11/2021, this skip stuff is not really being used. In theory it would all still work if
